@@ -1,0 +1,35 @@
+# UTF-8
+#
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    # filevers 與 prodvers 必須是 4 個整數的 tuple: (major, minor, patch, build)
+    filevers=(1, 0, 0, 0),
+    prodvers=(1, 0, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          '040904B0',  # 語系: 美國英語 / Unicode。若需繁體中文可用 '040404B0'
+          [
+            StringStruct('CompanyName', 'L'),
+            StringStruct('FileDescription', 'This is an automatic appointment making executable robot.'),
+            StringStruct('FileVersion', '1.0.0.0'),
+            StringStruct('InternalName', 'MyApplication'),
+            StringStruct('LegalCopyright', 'Copyright (C) 2026 Luisperenna. All rights reserved.'),
+            StringStruct('OriginalFilename', 'auto_appointment.exe'),
+            StringStruct('ProductName', 'Auto_appointment'),
+            StringStruct('ProductVersion', '1.0.1')
+          ]
+        )
+      ]
+    ),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])  # 1033 = 0x0409, 1200 = 0x04B0
+  ]
+)

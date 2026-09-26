@@ -1,0 +1,27 @@
+# 專案機密設定檔
+config.json
+
+# 網頁瀏覽器與 Playwright 相關暫存
+state.json
+*.png
+*.jpg
+*.jpeg
+
+# Python 相關
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虛擬環境
+myenv/
+
+# 日誌檔案
+*.log
+*.ico
+
+# 編輯器/作業系統設定
+.vscode/
+build/
+dist/
