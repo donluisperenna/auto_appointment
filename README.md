@@ -7,12 +7,20 @@ This is an automatic appointment making executable robot.
 
 [下載 v1.0.0 版本](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.0/auto_appointment_v1.0.0.exe)
 # Usage
-## 安裝
+## Installation
 1. `pip install -r requirements.txt`
 2. `playwright install`
-3. 將 `config.example.json` 複製一份並改名為 `config.json`，填入個人資料。
+3. Copy `config.example.json` to `config.json`, fill in personal information.
+    "target_dept": department of your interest
+    "target_doctor": doctor of your interest
+    "my_id": your identification number
+    "my_year": birth year
+    "my_month": birth month
+    "my_day": birth date
+    "target_time": time for appointment making in the form of hh:mm:ss
+    "automatic_confirm":if set to 'True', the program would autamtically confirm your appointment; otherwise, you need to press 'Enter' to proceed
 
-## 執行
+## Run
 `python auto_appointment.py`
 # Disclaimer
 This project is intended solely for programming language learning, academic research, and personal automation technology exchange.
