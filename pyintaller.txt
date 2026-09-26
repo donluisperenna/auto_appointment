@@ -1,0 +1,4 @@
+myenv\Scripts\activate
+pyinstaller --onefile --collect-all ddddocr auto_appointment.py
+pyinstaller --onedir --collect-all ddddocr auto_appointment.py
+

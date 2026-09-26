@@ -10,6 +10,16 @@ os.environ["PLAYWRIGHT_BROWSERS_PATH"] = custom_browser_dir
 from playwright.sync_api import sync_playwright
 import ddddocr
 from PIL import Image
+def get_config_path():
+    # 判斷是否為 PyInstaller 打包的環境
+    if getattr(sys, 'frozen', False):
+        # 取得 .exe 執行檔所在的資料夾路徑
+        base_path = os.path.dirname(sys.executable)
+    else:
+        # 取得原本 .py 腳本所在的資料夾路徑
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    return os.path.join(base_path, 'config.json')
 def setup_playwright():
     """使用內建驅動程式自動下載 Chromium，並存放在固定路徑"""
     print("正在檢查瀏覽器核心 (首次執行約需 1~2 分鐘下載，後續將秒開)...")
@@ -85,11 +95,12 @@ def intercept_route(route):
 def auto_snipe_appointment():
     setup_playwright()
     ocr = ddddocr.DdddOcr(show_ad=False)
-    config_file = 'config.json'
+    config_file = get_config_path()
     
-    # 檢查設定檔是否存在
     if not os.path.exists(config_file):
-        print(f"❌ 找不到 {config_file} 檔案，請先建立該檔案。")
+        print(f"❌ 找不到設定檔：{config_file}")
+        # 也可以在這裡加上 input() 讓視窗停留，避免閃退
+        input("請按 Enter 鍵結束...")
         return
 
     # 讀取 JSON 設定檔 (加入 encoding="utf-8" 避免中文亂碼)
