@@ -7,6 +7,8 @@ import subprocess
 import time
 from time import ctime
 from datetime import datetime, timedelta
+import threading
+confirm_event = threading.Event()
 from playwright._impl._driver import compute_driver_executable, get_driver_env
 custom_browser_dir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'ms-playwright')
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = custom_browser_dir
@@ -381,8 +383,9 @@ def auto_snipe_appointment():
                         page.locator('#patientIdentityConfirm').click()
                         print("自動確認掛號，掛號完成！")
                     else:
-                        print("\n按下 Enter 鍵來確認掛號")
-                        input("\n✅ 【資料填妥後，請直接在按下 Enter 鍵】，程式將瞬間為您送出表單...")
+                        print("\n【GUI 等待確認】請回到視窗點擊「確認送出掛號」按鈕或直接按下 Enter 鍵...")
+                        confirm_event.clear()  # 重設訊號
+                        confirm_event.wait()   # 阻塞當前背景執行緒，等待 GUI 觸發
                         page.locator('#patientIdentityConfirm').click()
                         
                     if page.locator('img[src^="ValidNumerImage"]').is_visible():

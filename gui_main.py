@@ -9,13 +9,11 @@ import threading
 from tkinter import ttk  
 import re              
 from datetime import date, timedelta, datetime
-import holidays
-# 明確引入台灣專用模組，強制 PyInstaller 捕捉
 try:
-    # 明確指定載入 Taiwan 類別，避免動態 lookup 失效
-    from holidays.countries.taiwan import Taiwan
-    tw_holidays = Taiwan()
-except Exception:
+    import holidays
+    # 載入台灣國定假日支援
+    tw_holidays = holidays.Taiwan()
+except ImportError:
     tw_holidays = None
 
 CONFIG_FILE = 'config.json'
@@ -104,8 +102,8 @@ class AppGUI:
         
         self.create_widgets()
         
-        sys.stdout = PrintLogger(self.log_area)
-        sys.stderr = PrintLogger(self.log_area)
+        sys.stdout = PrintLogger(self.log_area, self)
+        sys.stderr = PrintLogger(self.log_area, self)
 
     def load_config(self):
         if os.path.exists(CONFIG_FILE):
@@ -137,7 +135,6 @@ class AppGUI:
         except Exception as e:
             messagebox.showerror("錯誤", f"儲存設定檔失敗: {e}")
             return False
-
     def create_widgets(self):
         form_frame = tk.Frame(self.root, bg=self.bg_color)
         form_frame.pack(pady=15, padx=30) # 置中排版
@@ -325,6 +322,23 @@ class AppGUI:
                                                   font=self.font_log, bg=self.log_bg, fg=self.log_fg, 
                                                   relief="flat", padx=15, pady=15)
         self.log_area.pack(fill=tk.BOTH, expand=True)
+
+        # 確認送出按鈕 (初始為停用狀態)
+        self.confirm_btn = tk.Button(
+            form_frame, 
+            text="確認送出掛號 (Enter)", 
+            command=self.trigger_confirm, 
+            bg="#10B981", fg="#FFFFFF", 
+            font=("微軟正黑體", 14, "bold"), 
+            relief="flat", cursor="hand2", 
+            state=tk.DISABLED
+        )
+        self.confirm_btn.grid(row=row, column=0, columnspan=2, pady=(0, 20), ipadx=30, ipady=5)
+        row += 1
+
+        # 綁定整重視窗的 Enter 鍵
+        self.root.bind("<Return>", lambda event: self.trigger_confirm())
+
     def toggle_id_visibility(self):
         """切換身分證字號明文與星號遮罩"""
         if self.show_id:
@@ -548,9 +562,28 @@ class AppGUI:
             self.root.after(0, lambda: messagebox.showerror("錯誤", f"掛號失敗: {e}"))
         finally:
             # 程式跑完後，將按鈕恢復正常狀態 (安全地更新 GUI)
-            # 恢復按鈕原本的藍色
             self.root.after(0, lambda: self.run_btn.config(state=tk.NORMAL, bg=self.btn_bg))
+            self.root.after(0, lambda: self.confirm_btn.config(state=tk.DISABLED, bg="#9CA3AF"))
+    def trigger_confirm(self):
+        """點擊確認按鈕或在 GUI 視窗按下 Enter 時觸發"""
+        if self.confirm_btn['state'] == tk.NORMAL:
+            self.confirm_btn.config(state=tk.DISABLED, bg="#9CA3AF")
+            auto_appointment.confirm_event.set()
+class PrintLogger:
+    def __init__(self, text_widget, app=None):
+        self.text_widget = text_widget
+        self.app = app
 
+    def write(self, text):
+        self.text_widget.insert(tk.END, text)
+        self.text_widget.see(tk.END)
+        
+        # 當爬蟲提示等待確認時，透過主線程啟用 GUI 確認按鈕
+        if "【GUI 等待確認】" in text and self.app:
+            self.app.root.after(0, lambda: self.app.confirm_btn.config(state=tk.NORMAL, bg="#10B981"))
+
+    def flush(self):
+        pass
 if __name__ == "__main__":
     root = tk.Tk()
     app = AppGUI(root)

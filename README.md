@@ -2,6 +2,8 @@
 This is an automatic appointment making executable robot.
 # Release
 ## Latest version
+[下載 v1.0.4 版本 (exe)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.4/auto_appointment_v1.0.4.exe)
+[下載 v1.0.4 版本 (rar)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.4/auto_appointment_v1.0.4.rar)
 
 ## Previous version
 [下載 v1.0.3 版本 (rar)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.3/auto_appointment_v1.0.3.rar)
@@ -26,9 +28,10 @@ This is an automatic appointment making executable robot.
     "my_day": birth date
     "target_time": time for appointment making in the form of hh:mm:ss
     "automatic_confirm":if set to 'True', the program would autamtically confirm your appointment; otherwise, you need to press 'Enter' to proceed
-
 ## Run
-`python auto_appointment.py`
+`python gui_main.py`
+## Alternatives
+Alternatively, you can use the GUI itself to fill in personal information and run the programs.
 # Disclaimer
 This project is intended solely for programming language learning, academic research, and personal automation technology exchange.
 Do not use this tool for commercial profit, malicious consumption of medical resources, or any behavior that undermines the fairness of hospital appointment systems.
