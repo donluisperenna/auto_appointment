@@ -3,14 +3,15 @@ This is an automatic appointment making executable robot.
 ![illustration of the program](img/img.png)
 # Release
 ## Latest version
-[下載 v1.0.4 版本 (exe)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.4/auto_appointment_v1.0.4.exe)
+[下載 v1.0.5 版本 (exe)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.5/auto_appointment_v1.0.5.exe)
 
-[下載 v1.0.4 版本 (rar)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.4/auto_appointment_v1.0.4.rar)
+[下載 v1.0.5 版本 (rar)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.5/auto_appointment_v1.0.5.rar)
 
 ## Previous version
 
 | Version| Download link | Discription|
 | ------ | ------ | ------ |
+| v1.0.4 | [下載 v1.0.4 版本 (exe)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.4/auto_appointment_v1.0.4.exe)[下載 v1.0.4 版本 (rar)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.4/auto_appointment_v1.0.4.rar)| GUI available|
 | v1.0.3 | [下載 v1.0.3 版本 (rar)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.3/auto_appointment_v1.0.3.rar) | |
 | v1.0.2 | [下載 v1.0.2 版本 (rar)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.2/auto_appointment_v1.0.2.rar) | |
 | v1.0.1 | [下載 v1.0.1 版本 (exe)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.1/auto_appointment_v1.0.1.exe) [下載 v1.0.1 版本 (rar)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.1/auto_appointment_v1.0.1.rar) |  |
