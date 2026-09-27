@@ -3,7 +3,6 @@ config.json
 
 # 網頁瀏覽器與 Playwright 相關暫存
 state.json
-*.png
 *.jpg
 *.jpeg
 
