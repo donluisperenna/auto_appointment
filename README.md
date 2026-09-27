@@ -1,5 +1,6 @@
 # Introduction
 This is an automatic appointment making executable robot.
+![illustration of the program](img/img.png)
 # Release
 ## Latest version
 [下載 v1.0.4 版本 (exe)](https://github.com/donluisperenna/auto_appointment/releases/download/v1.0.4/auto_appointment_v1.0.4.exe)
