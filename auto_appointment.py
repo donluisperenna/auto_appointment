@@ -1,38 +1,31 @@
-import re
+import requests
+import ntplib
 import sys
 import os
 import json
 import subprocess
 import time
+from time import ctime
 from datetime import datetime, timedelta
 from playwright._impl._driver import compute_driver_executable, get_driver_env
 custom_browser_dir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'ms-playwright')
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = custom_browser_dir
 from playwright.sync_api import sync_playwright
 import ddddocr
-from PIL import Image
 def get_config_path():
-    # 判斷是否為 PyInstaller 打包的環境
     if getattr(sys, 'frozen', False):
-        # 取得 .exe 執行檔所在的資料夾路徑
         base_path = os.path.dirname(sys.executable)
     else:
-        # 取得原本 .py 腳本所在的資料夾路徑
         base_path = os.path.dirname(os.path.abspath(__file__))
-    
     return os.path.join(base_path, 'config.json')
+
 def setup_playwright():
-    """使用內建驅動程式自動下載 Chromium，並存放在固定路徑"""
     print("正在檢查瀏覽器核心 (首次執行約需 1~2 分鐘下載，後續將秒開)...")
     try:
         from playwright._impl._driver import compute_driver_executable, get_driver_env
         driver_executable, driver_cli = compute_driver_executable()
-        
-        # 取得 Playwright 的預設環境變數，並確保包含我們自訂的路徑
         env = get_driver_env()
         env["PLAYWRIGHT_BROWSERS_PATH"] = custom_browser_dir
-        
-        # 隱藏終端機輸出，強制靜默下載，避免與 CMD 畫面衝突
         subprocess.run(
             [driver_executable, driver_cli, "install", "chromium"],
             env=env,
@@ -41,58 +34,92 @@ def setup_playwright():
         )
     except Exception as e:
         print(f"⚠️ 瀏覽器下載程序異常，若後續正常彈出視窗則可忽略。錯誤細節: {e}")
-
-def wait_until_target(target_time_str):
-    """精準倒數計時器"""
-    now = datetime.now()
+def send_discord_notify(webhook_url, message):
+    """發送 Discord Webhook 通知"""
+    if not webhook_url:
+        return  # 若沒有設定網址則直接跳過
+        
+    payload = {"content": message}
     try:
-        # 將輸入的時間字串轉換為今天的日期+目標時間
+        # timeout 設短一點，避免發送通知卡住主程式
+        requests.post(webhook_url, json=payload, timeout=5)
+        print("🔔 已成功發送 Discord 通知！")
+    except Exception as e:
+        print(f"⚠️ Discord 通知發送失敗: {e}")
+def get_ntp_offset():
+    """與國家時間伺服器同步，取得本機與標準時間的秒數誤差"""
+    # 台灣的國家時間與頻率標準實驗室 NTP 伺服器
+    ntp_servers = ['time.stdtime.gov.tw', 'clock.stdtime.gov.tw', 'tw.pool.ntp.org']
+    
+    print("🔄 正在與國家時間伺服器進行毫秒級同步...")
+    client = ntplib.NTPClient()
+    
+    for server in ntp_servers:
+        try:
+            # timeout 設為 2 秒，避免卡住
+            response = client.request(server, version=3, timeout=2)
+            offset = response.offset
+            print(f"✅ 時間同步成功！({server})")
+            print(f"   本機時間與標準時間誤差: {offset:.4f} 秒")
+            return offset
+        except Exception as e:
+            print(f"⚠️ {server} 同步失敗 ({e})，嘗試下一個伺服器...")
+            
+    print("❌ 所有 NTP 伺服器同步失敗，將使用本機時間。")
+    return 0.0
+def wait_until_target(target_time_str):
+    """具備 NTP 補償的精準倒數計時器"""
+    # 1. 取得時間誤差
+    time_offset = get_ntp_offset()
+    
+    # 2. 計算出「真正的現在時間」
+    real_now = datetime.now() + timedelta(seconds=time_offset)
+    
+    try:
         target_time = datetime.strptime(target_time_str, "%H:%M:%S").replace(
-            year=now.year, month=now.month, day=now.day
+            year=real_now.year, month=real_now.month, day=real_now.day
         )
     except ValueError:
-        print("❌ 時間格式錯誤！請重新執行並使用 HH:MM:SS 格式（如 18:00:00）")
+        print("❌ 時間格式錯誤！請使用 HH:MM:SS 格式（如 18:00:00）")
         exit()
 
-    # 如果輸入的時間已經過了，自動設定為明天的這個時間
-    if target_time < now:
+    if target_time < real_now:
         print("⏳ 提醒：輸入的時間今日已過，將設定為【明天】的此時刻啟動。")
         target_time += timedelta(days=1)
 
-    print(f"⏳ 系統將在 {target_time.strftime('%Y-%m-%d %H:%M:%S')} 準時開搶...")
+    print(f"⏳ 系統將在標準時間 {target_time.strftime('%Y-%m-%d %H:%M:%S')} 準時開搶...")
     
     while True:
-        now = datetime.now()
-        diff = (target_time - now).total_seconds()
+        # 在迴圈內持續補償誤差
+        real_now = datetime.now() + timedelta(seconds=time_offset)
+        diff = (target_time - real_now).total_seconds()
         
-        if diff <= 0:
-            print(f"\n🚀 時間到！開始執行搶號 ({now.strftime('%H:%M:%S.%f')[:-3]})")
+        if diff <= 0.02:
+            print(f"\n🚀 時間到！開始執行搶號 ({real_now.strftime('%H:%M:%S.%f')[:-3]})")
             break
         elif diff > 2:
-            # 距離大於 2 秒時，每秒檢查一次，不佔用 CPU 資源
             time.sleep(1)
-            # 每 10 秒印出一次進度，讓你知道程式還活著
             if int(diff) % 10 == 0:
                 print(f"倒數 {int(diff)} 秒...")
         else:
-            # [關鍵] 距離小於 2 秒時，進入「忙碌等待 (Busy Wait)」
-            # 不使用 sleep，讓 CPU 全速輪詢，達到毫秒級的觸發精準度
+            # 進入最後 2 秒，完全不使用 sleep，讓 CPU 全速輪詢 (Busy Wait)
+            # 配合 NTP 誤差補償，精準度可達到幾毫秒之內
             pass
+
 def intercept_route(route):
-    # 攔截圖片(但放行驗證碼)、CSS、字體等不需要的資源
     resource_type = route.request.resource_type
     url = route.request.url
     
     if resource_type in ["stylesheet", "font", "media"]:
         route.abort()
     elif resource_type == "image":
-        # 注意：千萬不能擋掉驗證碼圖片！
         if "ValidNumerImage" in url:
             route.continue_()
         else:
             route.abort()
     else:
         route.continue_()
+
 def auto_snipe_appointment():
     setup_playwright()
     ocr = ddddocr.DdddOcr(show_ad=False)
@@ -100,20 +127,25 @@ def auto_snipe_appointment():
     
     if not os.path.exists(config_file):
         print(f"❌ 找不到設定檔：{config_file}")
-        # 也可以在這裡加上 input() 讓視窗停留，避免閃退
         input("請按 Enter 鍵結束...")
         return
 
-    # 讀取 JSON 設定檔 (加入 encoding="utf-8" 避免中文亂碼)
     with open(config_file, 'r', encoding='utf-8') as f:
         config = json.load(f)
 
-    # 取得設定值，並使用 .get() 避免欄位遺失導致程式崩潰
     target_dept = config.get("target_dept", "").strip()
-    target_doctor = config.get("target_doctor", "").strip()
+    
+    # 讀取醫生候補名單陣列，若只有單一醫師也能相容
+    target_doctors = config.get("target_doctors", [])
+    if not target_doctors and config.get("target_doctor"):
+        target_doctors = [config.get("target_doctor").strip()]
+    discord_webhook_url = config.get("discord_webhook_url", "").strip()
+    target_date = config.get("target_date", "").strip()
+    # 讀取撿漏模式的刷新間隔 
+    snipe_interval = config.get("snipe_interval", 60)
 
-    if not target_dept or not target_doctor:
-        print("❌ 設定檔中「科別」或「醫師姓名」未填寫，程式結束。")
+    if not target_dept or not target_doctors:
+        print("❌ 設定檔中「科別」或「醫師姓名陣列(target_doctors)」未填寫，程式結束。")
         return
 
     my_id = config.get("my_id", "").strip()
@@ -123,7 +155,8 @@ def auto_snipe_appointment():
     target_time_input = config.get("target_time", "").strip()
     automatic_confirm = config.get("automatic_confirm", "").strip()
     
-    print(f"✅ 設定讀取成功：將預約 {target_dept} {target_doctor} 醫師")
+    print(f"✅ 設定讀取成功：將預約 {target_dept}，候補醫師順序：{target_doctors}")
+    print(f"✅ 撿漏刷新間隔設定為：{snipe_interval} 秒")
     url = "https://reg.ntuh.gov.tw/WebReg/WebReg/RegShowBlock?vHospCode=T0"
 
     with sync_playwright() as p:
@@ -136,19 +169,17 @@ def auto_snipe_appointment():
             ]
         )
         page = browser.new_page()
-        
-        # [加速技巧 2] 更激進的資源阻擋 (連媒體檔一起擋)
         page.route("**/*", intercept_route)
         print(f"正在前往台大醫院總覽頁面，尋找【{target_dept}】...")
         
         try:
-            # 步驟 A：先到總覽頁面找出該科別的網址
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
             page.wait_for_selector(".dep-name-border", timeout=15000)
         except Exception as e:
             print(f"❌ 載入總覽頁面失敗: {e}")
             browser.close()
             return
+
         find_dept_js = """
         (targetDept) => {
             let deptDivs = document.querySelectorAll('.dep-name-border');
@@ -167,14 +198,14 @@ def auto_snipe_appointment():
         dept_href = page.evaluate(find_dept_js, target_dept)
         
         if not dept_href:
-            print(f"❌ 找不到您輸入的科別【{target_dept}】，請檢查名稱是否正確（例如是否包含『部』字）。")
+            print(f"❌ 找不到您輸入的科別【{target_dept}】，請檢查名稱是否正確。")
             browser.close()
             return
+            
         target_dept_url = f"https://reg.ntuh.gov.tw{dept_href}" if dept_href.startswith("/") else dept_href
         print(f"✅ 成功找到科別網址：{target_dept_url}")
-        
-        # 步驟 B：跳轉到該科別的排班頁面進行暖機
         print("正在預先載入該科別排班頁面，準備暖機...")
+        
         try:
             page.goto(target_dept_url, timeout=60000, wait_until="domcontentloaded")
         except:
@@ -182,19 +213,47 @@ def auto_snipe_appointment():
             
         if target_time_input:
             wait_until_target(target_time_input)
-        
+        if target_date:
+            print(f"正在檢查 {target_date} 是否有 {target_doctors} 醫師的門診...")
+            check_js = """
+            (params) => {
+                let { target_date, target_doctors } = params;
+                let buttons = document.querySelectorAll('button.doctor-tag');
+                for (let btn of buttons) {
+                    let nameDiv = btn.querySelector('.doc-name');
+                    let nameText = nameDiv ? nameDiv.innerText : '';
+                    let isTarget = target_doctors.some(doc => nameText.includes(doc));
+                    if (!isTarget) continue;
+                    
+                    // 根據網頁結構，往上尋找該醫師隸屬的日期標題 (sm-table-header)
+                    let rowElem = btn.closest('.row');
+                    let prevElem = rowElem ? rowElem.previousElementSibling : null;
+                    while (prevElem && !prevElem.classList.contains('sm-table-header')) {
+                        prevElem = prevElem.previousElementSibling;
+                    }
+                    
+                    if (prevElem && prevElem.innerText.includes(target_date)) {
+                        return true; // 找到了，該日期確實有該醫師的診
+                    }
+                }
+                return false; // 找不到
+            }
+            """
+            has_clinic = page.evaluate(check_js, {"target_date": target_date, "target_doctors": target_doctors})
+            if not has_clinic:
+                print(f"❌ 錯誤：在網頁上找不到【{target_date}】包含【{target_doctors}】的門診，請確認日期格式（如 9/29）或班表是否正確！")
+                browser.close()
+                return
+            print(f"✅ 檢查通過：{target_date} 有目標醫師的門診，準備進入搶號狀態！")
         attempt_count = 1
         found_url = None
         
-        # 開搶核心迴圈
         while True:
             print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 執行第 {attempt_count} 次掃描...")
             
             try:
                 if attempt_count == 1 and target_time_input:
                     page.reload(timeout=15000, wait_until="domcontentloaded")
-                
-                # 等待目標出現 (這是必須的，確保 DOM 載入)
                 page.wait_for_selector(".doctor-tag", timeout=10000)
             except Exception as e:
                 print(f"⚠️ 伺服器塞車，立即重試... ({e})")
@@ -202,103 +261,94 @@ def auto_snipe_appointment():
                 attempt_count += 1
                 continue
             
-            # ==========================================
-            # [加速技巧 3] 將 Python 迴圈改為 JavaScript 內部執行
-            # 這能消除 Python 與 Browser 之間幾十次的 WebSocket 傳輸延遲，瞬間完成判斷
-            # ==========================================
             js_code = """
-            (target_doctor) => {
+            (params) => {
+                let { target_doctors, target_date } = params;
                 let buttons = document.querySelectorAll('button.doctor-tag');
-                for (let btn of buttons) {
-                    let text = btn.innerText;
-                    
-                    // 1. 確認醫師名稱
-                    let nameDiv = btn.querySelector('.doc-name');
-                    let nameText = nameDiv ? nameDiv.innerText : '';
-                    if (!nameText.includes(target_doctor)) continue;
-                    
-                    // 2. 過濾無法掛號狀態
-                    if (text.includes('不續掛') || text.includes('停診')) continue;
-                    if (text.includes('額滿') || text.includes('僅存本院初診')) continue;
-                    
-                    // 3. 解析 onclick 網址
-                    let onclickAttr = btn.getAttribute('onclick');
-                    if (onclickAttr) {
-                        let match = onclickAttr.match(/window\\.location\\.href\\s*=\\s*'([^']+)'/);
-                        if (match && match[1]) {
-                            return match[1]; // 直接回傳相對路徑
+                
+                for (let target_doctor of target_doctors) {
+                    for (let btn of buttons) {
+                        let text = btn.innerText;
+                        let nameDiv = btn.querySelector('.doc-name');
+                        let nameText = nameDiv ? nameDiv.innerText : '';
+                        
+                        // 1. 確認醫師名稱
+                        if (!nameText.includes(target_doctor)) continue;
+                        
+                        // 2. [新增] 確認日期是否符合
+                        if (target_date) {
+                            let rowElem = btn.closest('.row');
+                            let prevElem = rowElem ? rowElem.previousElementSibling : null;
+                            while (prevElem && !prevElem.classList.contains('sm-table-header')) {
+                                prevElem = prevElem.previousElementSibling;
+                            }
+                            // 如果沒找到日期標題，或是標題不包含指定日期，就跳過這個按鈕
+                            if (!prevElem || !prevElem.innerText.includes(target_date)) {
+                                continue;
+                            }
+                        }
+                        
+                        // 3. 過濾無法掛號狀態
+                        if (text.includes('不續掛') || text.includes('停診')) continue;
+                        if (text.includes('額滿') || text.includes('僅存本院初診')) continue;
+                        
+                        // 4. 解析網址並立刻回傳
+                        let onclickAttr = btn.getAttribute('onclick');
+                        if (onclickAttr) {
+                            let match = onclickAttr.match(/window\\.location\\.href\\s*=\\s*'([^']+)'/);
+                            if (match && match[1]) {
+                                return {
+                                    href: match[1],
+                                    doctor: target_doctor
+                                };
+                            }
                         }
                     }
                 }
-                return null; // 沒找到回傳 null
+                return null;
             }
             """
             
-            # 呼叫 evaluate，將 JavaScript 丟進瀏覽器執行，毫秒級返回結果
-            href_result = page.evaluate(js_code, target_doctor)
+            # [修改] 將參數打包成字典傳給 JavaScript
+            result = page.evaluate(js_code, {"target_doctors": target_doctors, "target_date": target_date})
             
-            if href_result:
-                found_url = f"https://reg.ntuh.gov.tw/WebReg/WebReg/{href_result}"
+            if result:
+                found_url = f"https://reg.ntuh.gov.tw/WebReg/WebReg/{result['href']}"
+                matched_doctor = result['doctor'] # [新增] 紀錄實際掛到的醫師名字，方便後續通知使用
+                print(f"\n🎉 恭喜！找到【{matched_doctor}】醫師的名額，極速跳轉中...")
                 break
             else:
-                print(f"❌ 尚未釋出名額，2 秒後重新整理...\n")
-                time.sleep(2) 
+                print(f"❌ 所有候補醫師皆無名額，{snipe_interval} 秒後重新整理 (撿漏模式)...\n")
+                # 【修改點】：使用設定檔中的秒數進行等待，避免請求過快被封鎖
+                time.sleep(snipe_interval) 
                 attempt_count += 1
                 try:
                     page.reload(timeout=15000, wait_until="domcontentloaded")
                 except:
                     pass
 
-        # ================= 成功抓到名額後的極速跳轉 =================
         print("\a\a\a")
-        print(f"\n🎉 恭喜！找到名額，極速跳轉中...")
-        # 解除攔截器
-        #page.unroute("**/*", route_interceptor)
+        
         try:
             page.route("**/*", intercept_route)
             page.goto(found_url, wait_until='commit')
-            #input("\n👉 已進入掛號頁面！請盡快在瀏覽器上完成掛號。\n完成後，請在此終端機按下 Enter 鍵結束程式並關閉瀏覽器...")
+            
             try:
-                # 2. 等待「證件號碼」輸入框載入完成
-                # --- 實務重要提醒 ---
-                # 台大醫院掛號通常會有「圖形驗證碼」需要輸入。
-                # 程式自動填寫完上述資料後，可以讓程式暫停，讓你手動輸入驗證碼並點擊送出。
-                # 可以使用 page.pause() 開啟 Playwright 偵錯工具，或是用 wait_for_timeout 爭取手動時間。
-                # 等待 30 秒，讓你有時間手動輸入驗證碼並看結果
-                 # 定位驗證碼圖片 
                 max_retry = 2
                 retry_count = 0
                 while retry_count < max_retry:
                     retry_count += 1
-                    # ⚠️ 重要提醒：如果網頁跳回原頁面會「清空」你的身分證或生日等欄位，
-                    # 請務必把「填寫基本資料 (身分證、生日)」的程式碼也搬進這個迴圈裡執行！
-                    # 例如：
-                    # page.locator('#my_id_input').fill(my_id)
                     page.wait_for_selector('#option-1', timeout=5000)
-                    # (選擇性) 確保「身分證字號」的單選按鈕有被選取
-                    '''page.locator('#option-1').check()
-                    # 3. 輸入證件號碼 (對應 id="txtInputID")
-                    # 替換成你的身分證字號
-                    page.locator('#txtInputID').fill('A123456789') 
-                    # 4. 輸入出生日期 (對應 id="year", "month", "day")
-                    # 替換成你的出生年月日 (例如民國 69 年 1 月 15 日)
-                    page.locator('#year').fill('69')
-                    page.locator('#month').fill('1')
-                    page.locator('#day').fill('15')'''
-                    # 極速寫法 (打包成 JS 一次讓瀏覽器瞬間執行)
+                    
                     js_fill_code = f"""
-                        // 處理單選按鈕
                         let option1 = document.getElementById('option-1');
                         if (option1) {{
                             option1.checked = true;
                             option1.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                            
                             if (typeof changeInputType === 'function') {{
                                 changeInputType('personID');
                             }}
                         }}
-    
-                        // 定義極速填表函數
                         function fastFill(id, value) {{
                             let el = document.getElementById(id);
                             if (el) {{
@@ -307,16 +357,13 @@ def auto_snipe_appointment():
                                 el.dispatchEvent(new Event('change', {{ bubbles: true }}));
                             }}
                         }}
-                        
-                        // 動態帶入使用者輸入的變數
                         fastFill('txtInputID', '{my_id}'); 
                         fastFill('year', '{my_year}');               
                         fastFill('month', '{my_month}');               
                         fastFill('day', '{my_day}');                
                     """
-                    # 執行注入
                     page.evaluate(js_fill_code)
-                    # 1. 定位驗證碼與辨識
+                    
                     captcha_img_locator = page.locator('img[src^="ValidNumerImage"]')
                     captcha_img_locator.wait_for(state='visible')
                     
@@ -325,7 +372,7 @@ def auto_snipe_appointment():
                     print(f"第 {retry_count} 次嘗試 - ddddocr 辨識出: {captcha_text}")
                     
                     page.locator('#validText').fill(captcha_text)
-                    # 2. 點擊確定送出並等待網頁反應
+                    
                     if automatic_confirm == 'True':
                         page.locator('#patientIdentityConfirm').click()
                         print("自動確認掛號，掛號完成！")
@@ -333,17 +380,15 @@ def auto_snipe_appointment():
                         print("\n按下 Enter 鍵來確認掛號")
                         input("\n✅ 【資料填妥後，請直接在此終端機按下 Enter 鍵】，程式將瞬間為您送出表單...")
                         page.locator('#patientIdentityConfirm').click()
-                    # 3. 驗證是否成功進入下一頁
-                    # 檢查網頁上是否還能看到驗證碼圖片。如果還在，代表失敗了被退回原網頁
+                        
                     if page.locator('img[src^="ValidNumerImage"]').is_visible():
                         print("❌ 驗證碼錯誤或資料有誤，跳回原畫面，立刻重新嘗試...\n")
-                        continue  # 回到 while 迴圈開頭，重新辨識
+                        continue  
                     else:
                         print("✅ 驗證碼正確，成功進入下一頁！")
-                        break  # 離開迴圈，繼續執行後續搶號邏輯
-                # 5. 點選「確定送出」
-                # 這裡依然假設按鈕文字包含"確定送出"，
-                # 如果你有送出按鈕的 HTML，也可以改成用 id 定位 (例如 page.locator('#btnSubmit').click())
+                        success_msg = f"🎉 **掛號成功通知** 🎉\n您已成功預約 **{target_dept}** 的 **{matched_doctor}** 醫師！\n請盡快登入醫院系統確認詳細診號與時間。"
+                        send_discord_notify(discord_webhook_url, success_msg)
+                        break  
                 
                 page.wait_for_timeout(50000) 
             except Exception as e:
