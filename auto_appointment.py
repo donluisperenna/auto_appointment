@@ -51,7 +51,7 @@ def get_ntp_offset():
     # 台灣的國家時間與頻率標準實驗室 NTP 伺服器
     ntp_servers = ['time.stdtime.gov.tw', 'clock.stdtime.gov.tw', 'tw.pool.ntp.org']
     
-    print("🔄 正在與國家時間伺服器進行毫秒級同步...")
+    print("🔄正在與國家時間伺服器進行同步...")
     client = ntplib.NTPClient()
     
     for server in ntp_servers:
@@ -99,8 +99,12 @@ def wait_until_target(target_time_str):
             break
         elif diff > 2:
             time.sleep(1)
-            if int(diff) % 10 == 0:
+            if diff < 60 and int(diff) % 10 == 0:
                 print(f"倒數 {int(diff)} 秒...")
+            elif diff>=60 and int(diff)//60//60 >= 1 and int(diff) % 60 == 0:
+                print(f"倒數 {int(diff)//60//60}時{int(diff)//60%60}分...")
+            elif diff>=60 and int(diff)//60//60 == 0 and int(diff) % 60 == 0:
+                print(f"倒數 {int(diff)//60%60}分...")
         else:
             # 進入最後 2 秒，完全不使用 sleep，讓 CPU 全速輪詢 (Busy Wait)
             # 配合 NTP 誤差補償，精準度可達到幾毫秒之內
@@ -211,8 +215,6 @@ def auto_snipe_appointment():
         except:
             pass
             
-        if target_time_input:
-            wait_until_target(target_time_input)
         if target_date:
             print(f"正在檢查 {target_date} 是否有 {target_doctors} 醫師的門診...")
             check_js = """
@@ -241,10 +243,12 @@ def auto_snipe_appointment():
             """
             has_clinic = page.evaluate(check_js, {"target_date": target_date, "target_doctors": target_doctors})
             if not has_clinic:
-                print(f"❌ 錯誤：在網頁上找不到【{target_date}】包含【{target_doctors}】的門診，請確認日期格式（如 9/29）或班表是否正確！")
+                print(f"❌ 錯誤：在網頁上找不到【{target_date}】包含【{target_doctors}】的門診，請確認日期格式或班表是否正確！")
                 browser.close()
                 return
             print(f"✅ 檢查通過：{target_date} 有目標醫師的門診，準備進入搶號狀態！")
+        if target_time_input:
+            wait_until_target(target_time_input)
         attempt_count = 1
         found_url = None
         
@@ -378,7 +382,7 @@ def auto_snipe_appointment():
                         print("自動確認掛號，掛號完成！")
                     else:
                         print("\n按下 Enter 鍵來確認掛號")
-                        input("\n✅ 【資料填妥後，請直接在此終端機按下 Enter 鍵】，程式將瞬間為您送出表單...")
+                        input("\n✅ 【資料填妥後，請直接在按下 Enter 鍵】，程式將瞬間為您送出表單...")
                         page.locator('#patientIdentityConfirm').click()
                         
                     if page.locator('img[src^="ValidNumerImage"]').is_visible():

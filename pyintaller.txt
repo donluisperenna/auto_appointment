@@ -1,4 +1,5 @@
 myenv\Scripts\activate
-pyinstaller --onefile --collect-all ddddocr auto_appointment.py
-pyinstaller --onedir --collect-all ddddocr auto_appointment.py
+pyinstaller --onefile --collect-all ddddocr --exclude-module PyQt5 --exclude-module PySide6 --icon=app_icon.ico --version-file=version_info.txt auto_appointment.py
+
+pyinstaller -F -w --collect-all ddddocr --exclude-module PyQt5 --exclude-module PySide6 --icon=app_icon.ico --version-file=version_info.txt gui_main.py
 
