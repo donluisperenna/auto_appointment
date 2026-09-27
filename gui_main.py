@@ -142,8 +142,8 @@ class AppGUI:
         tk.Label(form_frame, text="掛號參數設定", font=self.font_title, bg=self.bg_color, \
                  fg="#1F2937").grid(row=0, column=0, columnspan=2, pady=(0, 20))
         departments = [
-            "內科系-內科部", "復健部", "老年醫學部", "腫瘤醫學部", "家庭醫學部", 
-            "精神部", "神經部", "環境暨職業醫學部", "基因醫學部", "外科系-外科部", 
+            "內科部", "復健部", "老年醫學部", "腫瘤醫學部", "家庭醫學部", 
+            "精神部", "神經部", "環境暨職業醫學部", "基因醫學部", "外科部", 
             "口腔醫學部", "骨科部", "皮膚部", "婦產部", "泌尿部", "眼科部", 
             "麻醉部", "耳鼻喉部", "其他科系-血友病中心", "影像醫學部", 
             "形體美容中心", "營養室", "乳房醫學中心", "核子醫學部", 
@@ -266,6 +266,14 @@ class AppGUI:
         self.entries["target_time"] = None
         row += 1
 
+        # --- 身分選擇 (初診 / 複診) ---
+        tk.Label(form_frame, text="看診身分", font=self.font_main, bg=self.bg_color, fg=self.text_color).grid(row=row, column=0, sticky='e', padx=10, pady=3)
+        self.patient_type_cb = ttk.Combobox(form_frame, values=["初診", "複診"], font=self.font_main, width=33, state="readonly")
+        current_patient_type = self.config_data.get("patient_type", "複診")
+        self.patient_type_cb.set(current_patient_type)
+        self.patient_type_cb.grid(row=row, column=1, columnspan=2, pady=3, sticky='w')
+        self.entries["patient_type"] = self.patient_type_cb
+        row += 1
         # --- 5. 身分證字號 (密碼遮罩 + 顯示切換按鈕) ---
         tk.Label(form_frame, text="身分證字號", font=self.font_main, bg=self.bg_color, fg=self.text_color).grid(row=row, column=0, sticky='e', padx=10, pady=3)
         self.id_entry = tk.Entry(form_frame, font=self.font_main, width=28, relief="solid", bd=1, show="*")
@@ -304,12 +312,21 @@ class AppGUI:
         self.entries["automatic_confirm"] = None
         row += 1
 
-        # 按鈕設計：扁平化、顏色亮眼、加上 cursor="hand2" 讓滑鼠移過去變成手指
-        self.run_btn = tk.Button(form_frame, text="儲存並執行", command=self.run_program, 
+        # 將原本單一的 run_btn 改為一個放置兩顆按鈕的容器
+        btn_frame = tk.Frame(form_frame, bg=self.bg_color)
+        btn_frame.grid(row=row, column=0, columnspan=2, pady=20)
+
+        # 儲存並執行按鈕
+        self.run_btn = tk.Button(btn_frame, text="儲存並執行", command=self.run_program, 
                                  bg=self.btn_bg, fg=self.btn_fg, font=("微軟正黑體", 14, "bold"), 
                                  relief="flat", cursor="hand2")
-        # 使用 ipadx 和 ipady 來增加按鈕內部的留白(變大)
-        self.run_btn.grid(row=row, column=0, columnspan=2, pady=25, ipadx=40, ipady=5)
+        self.run_btn.pack(side=tk.LEFT, padx=10, ipadx=25, ipady=5)
+
+        # 新增：停止搶號按鈕 (初始為停用狀態)
+        self.stop_btn = tk.Button(btn_frame, text="停止搶號", command=self.stop_program, 
+                                  bg="#EF4444", fg="#FFFFFF", font=("微軟正黑體", 14, "bold"), 
+                                  relief="flat", cursor="hand2", state=tk.DISABLED)
+        self.stop_btn.pack(side=tk.LEFT, padx=10, ipadx=25, ipady=5)
         row += 1
         
         log_frame = tk.Frame(self.root, bg=self.bg_color)
@@ -366,6 +383,39 @@ class AppGUI:
             self.hour_cb.config(state="readonly")
             self.min_cb.config(state="readonly")
             self.sec_cb.config(state="readonly")
+    def stop_program(self):
+        """按下『停止搶號』按鈕時觸發"""
+        print("\n🛑 正在停止搶號並關閉瀏覽器，請稍候...")
+        auto_appointment.stop_event.set()
+        # 若有卡在手動確認的 Event，一併喚醒以利退出
+        auto_appointment.confirm_event.set()
+        self.stop_btn.config(state=tk.DISABLED, bg="#9CA3AF")
+
+    def run_program(self):
+        # 當使用者按下「儲存並執行」時
+        if self.save_config():
+            # 啟用停止按鈕、停用執行按鈕
+            self.run_btn.config(state=tk.DISABLED, bg="#9CA3AF")
+            self.stop_btn.config(state=tk.NORMAL, bg="#EF4444")
+            self.log_area.delete('1.0', tk.END)
+            print("設定已儲存！開始連線至掛號系統...\n" + "="*40)
+            
+            thread = threading.Thread(target=self.execute_booking)
+            thread.daemon = True 
+            thread.start()
+
+    def execute_booking(self):
+        try:
+            auto_appointment.auto_snipe_appointment()
+            print("\n" + "="*50 + "\n[系統訊息] 任務結束，可重新修改設定並搶號。")
+        except Exception as e:
+            print(f"\n[系統錯誤] {e}")
+            self.root.after(0, lambda: messagebox.showerror("錯誤", f"執行異常: {e}"))
+        finally:
+            # 任務結束或中斷後，將所有介面按鈕復原回可編輯、可再次執行的狀態
+            self.root.after(0, lambda: self.run_btn.config(state=tk.NORMAL, bg=self.btn_bg))
+            self.root.after(0, lambda: self.stop_btn.config(state=tk.DISABLED, bg="#9CA3AF"))
+            self.root.after(0, lambda: self.confirm_btn.config(state=tk.DISABLED, bg="#9CA3AF"))
     def validate_inputs(self):
         """即時格式防呆驗證"""
         # 1. 驗證身分證格式 (1碼大寫英文字母 + 9碼數字)
@@ -542,28 +592,6 @@ class AppGUI:
         except Exception as e:
             messagebox.showerror("錯誤", f"儲存設定檔失敗: {e}")
             return False
-    def run_program(self):
-        # 當使用者按下「儲存並執行」時
-        if self.save_config():
-            self.run_btn.config(state=tk.DISABLED, bg="#9CA3AF")
-            self.log_area.delete('1.0', tk.END)
-            print("設定已儲存！開始連線至掛號系統...\n" + "="*40)
-            
-            thread = threading.Thread(target=self.execute_booking)
-            thread.daemon = True 
-            thread.start()
-    def execute_booking(self):
-        try:
-            # 呼叫你原本的程式碼
-            auto_appointment.auto_snipe_appointment()
-            print("\n" + "="*50 + "\n[系統訊息] 任務執行完畢！")
-        except Exception as e:
-            print(f"\n[系統錯誤] {e}")
-            self.root.after(0, lambda: messagebox.showerror("錯誤", f"掛號失敗: {e}"))
-        finally:
-            # 程式跑完後，將按鈕恢復正常狀態 (安全地更新 GUI)
-            self.root.after(0, lambda: self.run_btn.config(state=tk.NORMAL, bg=self.btn_bg))
-            self.root.after(0, lambda: self.confirm_btn.config(state=tk.DISABLED, bg="#9CA3AF"))
     def trigger_confirm(self):
         """點擊確認按鈕或在 GUI 視窗按下 Enter 時觸發"""
         if self.confirm_btn['state'] == tk.NORMAL:

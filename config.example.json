@@ -1,12 +1,13 @@
 {
     "target_dept": "家庭醫學部",
-    "target_doctors": ["施志遠","曾家琳"],
+    "target_doctors": ["123", "321"],
     "target_date": "9/29",
+    "patient_type": "初診",
     "my_id": "A135724680",
     "my_year": "69",
     "my_month": "1",
     "my_day": "15",
     "target_time": "",
-    "automatic_confirm":"False",
+    "automatic_confirm": "False",
     "discord_webhook_url": ""
 }
